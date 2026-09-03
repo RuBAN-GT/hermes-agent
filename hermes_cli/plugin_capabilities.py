@@ -128,6 +128,14 @@ CAPABILITY_REGISTRY: Dict[str, CapabilitySpec] = {
                 "(add reactions, rename threads) via ctx.platform_actions"
             ),
         ),
+        CapabilitySpec(
+            id="gateway.human_decisions",
+            legacy_path=("allow_human_decisions",),
+            description=(
+                "Show session-bound Telegram decision buttons and receive the "
+                "selected value via ctx.human_decisions"
+            ),
+        ),
     )
 }
 

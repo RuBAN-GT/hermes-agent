@@ -435,6 +435,7 @@ working but are **deprecated** in favor of the consent flow:
 | `llm.profile_override` | `llm.allow_profile_override` |
 | `llm.task_override` | `llm.allow_task_override` |
 | `gateway.platform_actions` | `allow_platform_actions` |
+| `gateway.human_decisions` | `allow_human_decisions` |
 
 A gate is open when *either* the capability is granted *or* the legacy key is
 set — existing configs keep working unchanged.
@@ -493,6 +494,35 @@ surface — per the #64176 round-2 design correction it requires its own
 capability (`gateway.raw_events`) with a "no stability guarantee" label and a
 separate design, and has not shipped.
 :::
+
+### Human decisions
+
+`ctx.human_decisions` lets a plugin ask the actor of an existing Telegram
+gateway session to select a value with inline buttons. It is off by default and
+requires the `gateway.human_decisions` capability. The plugin supplies a
+session key, never a chat id; Hermes resolves and authorizes the current session
+before sending anything.
+
+Gateway slash-command handlers can opt in to the current key with
+`fn(raw_args, *, session_key="")`. CLI calls receive no gateway key.
+
+```python
+result = await ctx.human_decisions.request(
+    title="Deploy release?",
+    body="Deploy build 123 to production?",
+    choices=("approve", "deny"),
+    session_key=session_key,
+    timeout_s=300,
+)
+if result["ok"]:
+    decision = result["decision"]
+```
+
+The decision is single-use, expires after `timeout_s`, and only the original
+session actor can resolve it. v1 supports Telegram only; unavailable gateways,
+other platforms, rotated sessions, and expired prompts return structured errors.
+This is a plugin interaction primitive, **not** a tool approval, security
+policy, auto-approve mechanism, or substitute for `ApprovalPolicy`.
 
 ### Discovering community plugins
 

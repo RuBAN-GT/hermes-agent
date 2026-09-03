@@ -56,6 +56,7 @@ def suppress_post_tool_call_hook():
     finally:
         _post_tool_call_hook_suppressed.reset(token)
 
+
 # Tracks platform-bundle names already flagged in disabled_toolsets so the
 # advisory (#33924) is logged once per name, not on every tool recompute.
 _WARNED_DISABLED_BUNDLES: set = set()
@@ -85,7 +86,7 @@ def _is_dispatcher_owned_worker() -> bool:
 # Async Bridging  (single source of truth -- used by registry.dispatch too)
 # =============================================================================
 
-_tool_loop = None          # persistent loop for the main (CLI) thread
+_tool_loop = None  # persistent loop for the main (CLI) thread
 _tool_loop_lock = threading.Lock()
 _worker_thread_local = threading.local()  # per-worker-thread persistent loops
 
@@ -119,7 +120,7 @@ def _get_worker_loop():
     By keeping the loop alive for the thread's lifetime, cached clients
     stay valid and their cleanup runs on a live loop.
     """
-    loop = getattr(_worker_thread_local, 'loop', None)
+    loop = getattr(_worker_thread_local, "loop", None)
     if loop is None or loop.is_closed():
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -245,6 +246,7 @@ discover_builtin_tools()
 # Plugin tool discovery (user/project/pip plugins)
 try:
     from hermes_cli.plugins import discover_plugins
+
     discover_plugins()
 except Exception as e:
     logger.debug("Plugin discovery failed: %s", e)
@@ -274,10 +276,16 @@ _LEGACY_TOOLSET_MAP = {
     "image_tools": ["image_generate"],
     "skills_tools": ["skills_list", "skill_view", "skill_manage"],
     "browser_tools": [
-        "browser_navigate", "browser_snapshot", "browser_click",
-        "browser_type", "browser_scroll", "browser_back",
-        "browser_press", "browser_get_images",
-        "browser_vision", "browser_console"
+        "browser_navigate",
+        "browser_snapshot",
+        "browser_click",
+        "browser_type",
+        "browser_scroll",
+        "browser_back",
+        "browser_press",
+        "browser_get_images",
+        "browser_vision",
+        "browser_console",
     ],
     "cronjob_tools": ["cronjob_manage"],
     "file_tools": ["read_file", "write_file", "patch", "search_files"],
@@ -356,6 +364,7 @@ def get_tool_definitions(
     if quiet_mode:
         try:
             from hermes_cli.config import get_config_path
+
             cfg_path = get_config_path()
             cfg_stat = cfg_path.stat()
             cfg_fp = (cfg_stat.st_mtime_ns, cfg_stat.st_size)
@@ -386,8 +395,12 @@ def get_tool_definitions(
             # schemas are treated as read-only by all known callers.
             return list(cached)
 
-    result = _compute_tool_definitions(enabled_toolsets, disabled_toolsets, quiet_mode,
-                                       skip_tool_search_assembly=skip_tool_search_assembly)
+    result = _compute_tool_definitions(
+        enabled_toolsets,
+        disabled_toolsets,
+        quiet_mode,
+        skip_tool_search_assembly=skip_tool_search_assembly,
+    )
     if quiet_mode and cache_key is not None:
         # Cache the freshly-computed list, but hand callers a shallow copy so
         # downstream mutations (e.g. run_agent appending memory/LCM tool
@@ -443,17 +456,22 @@ def _compute_tool_definitions(
                 resolved = resolve_toolset(toolset_name)
                 tools_to_include.update(resolved)
                 if not quiet_mode:
-                    print(f"✅ Enabled toolset '{toolset_name}': {', '.join(resolved) if resolved else 'no tools'}")
+                    print(
+                        f"✅ Enabled toolset '{toolset_name}': {', '.join(resolved) if resolved else 'no tools'}"
+                    )
             elif toolset_name in _LEGACY_TOOLSET_MAP:
                 legacy_tools = _LEGACY_TOOLSET_MAP[toolset_name]
                 tools_to_include.update(legacy_tools)
                 if not quiet_mode:
-                    print(f"✅ Enabled legacy toolset '{toolset_name}': {', '.join(legacy_tools)}")
+                    print(
+                        f"✅ Enabled legacy toolset '{toolset_name}': {', '.join(legacy_tools)}"
+                    )
             elif not quiet_mode:
                 print(f"⚠️  Unknown toolset: {toolset_name}")
     else:
         # Default: start with everything
         from toolsets import get_all_toolsets
+
         for ts_name in get_all_toolsets():
             tools_to_include.update(resolve_toolset(ts_name))
 
@@ -465,7 +483,10 @@ def _compute_tool_definitions(
         for toolset_name in disabled_toolsets:
             if validate_toolset(toolset_name):
                 from toolsets import bundle_non_core_tools, get_toolset
-                if toolset_name.startswith("hermes-") or (get_toolset(toolset_name) or {}).get("posture"):
+
+                if toolset_name.startswith("hermes-") or (
+                    get_toolset(toolset_name) or {}
+                ).get("posture"):
                     # Platform bundles (hermes-*) include _HERMES_CORE_TOOLS, and
                     # posture toolsets (`posture: True`, e.g. `coding`) re-list
                     # those same core tools without owning them, so subtracting
@@ -475,8 +496,11 @@ def _compute_tool_definitions(
                     to_remove = bundle_non_core_tools(toolset_name)
                     tools_to_include.difference_update(to_remove)
                     resolved = sorted(to_remove)
-                    if (not quiet_mode and toolset_name.startswith("hermes-")
-                            and toolset_name not in _WARNED_DISABLED_BUNDLES):
+                    if (
+                        not quiet_mode
+                        and toolset_name.startswith("hermes-")
+                        and toolset_name not in _WARNED_DISABLED_BUNDLES
+                    ):
                         _WARNED_DISABLED_BUNDLES.add(toolset_name)
                         logger.info(
                             "agent.disabled_toolsets contains platform-bundle "
@@ -491,12 +515,16 @@ def _compute_tool_definitions(
                     resolved = resolve_toolset(toolset_name)
                     tools_to_include.difference_update(resolved)
                 if not quiet_mode:
-                    print(f"🚫 Disabled toolset '{toolset_name}': {', '.join(resolved) if resolved else 'no tools'}")
+                    print(
+                        f"🚫 Disabled toolset '{toolset_name}': {', '.join(resolved) if resolved else 'no tools'}"
+                    )
             elif toolset_name in _LEGACY_TOOLSET_MAP:
                 legacy_tools = _LEGACY_TOOLSET_MAP[toolset_name]
                 tools_to_include.difference_update(legacy_tools)
                 if not quiet_mode:
-                    print(f"🚫 Disabled legacy toolset '{toolset_name}': {', '.join(legacy_tools)}")
+                    print(
+                        f"🚫 Disabled legacy toolset '{toolset_name}': {', '.join(legacy_tools)}"
+                    )
             elif not quiet_mode:
                 print(f"⚠️  Unknown toolset: {toolset_name}")
 
@@ -520,9 +548,16 @@ def _compute_tool_definitions(
     # execute_code" even when the API key isn't configured or the toolset is
     # disabled (#560-discord).
     if "execute_code" in available_tool_names:
-        from tools.code_execution_tool import SANDBOX_ALLOWED_TOOLS, build_execute_code_schema, _get_execution_mode
+        from tools.code_execution_tool import (
+            SANDBOX_ALLOWED_TOOLS,
+            build_execute_code_schema,
+            _get_execution_mode,
+        )
+
         sandbox_enabled = SANDBOX_ALLOWED_TOOLS & available_tool_names
-        dynamic_schema = build_execute_code_schema(sandbox_enabled, mode=_get_execution_mode())
+        dynamic_schema = build_execute_code_schema(
+            sandbox_enabled, mode=_get_execution_mode()
+        )
         for i, td in enumerate(filtered_tools):
             if td.get("function", {}).get("name") == "execute_code":
                 filtered_tools[i] = {"type": "function", "function": dynamic_schema}
@@ -541,13 +576,15 @@ def _compute_tool_definitions(
         if discord_tool_name in available_tool_names:
             try:
                 from tools import discord_tool as _dt
+
                 schema_fn = getattr(_dt, _discord_schema_fns[discord_tool_name])
                 dynamic = schema_fn()
             except Exception:
                 dynamic = None
             if dynamic is None:
                 filtered_tools = [
-                    t for t in filtered_tools
+                    t
+                    for t in filtered_tools
                     if t.get("function", {}).get("name") != discord_tool_name
                 ]
                 available_tool_names.discard(discord_tool_name)
@@ -585,9 +622,13 @@ def _compute_tool_definitions(
     # security posture.  Session-level gate, NOT a check_fn: check_fn results
     # are TTL-cached process-wide while one gateway process serves many
     # sessions with different toolset configs.
-    if "browser_exec" in available_tool_names and "terminal" not in available_tool_names:
+    if (
+        "browser_exec" in available_tool_names
+        and "terminal" not in available_tool_names
+    ):
         filtered_tools = [
-            td for td in filtered_tools
+            td
+            for td in filtered_tools
             if td.get("function", {}).get("name") != "browser_exec"
         ]
         available_tool_names.discard("browser_exec")
@@ -602,7 +643,9 @@ def _compute_tool_definitions(
     # Same session-level seam as the browser_exec gate above.
     if "delegate_task" in available_tool_names:
         blocked_present = [
-            t for t in ("clarify", "memory", "cronjob_manage") if t in available_tool_names
+            t
+            for t in ("clarify", "memory", "cronjob_manage")
+            if t in available_tool_names
         ]
         if len(blocked_present) < 3:
             full_offvariant = "delegate_task, clarify, memory, or cronjob"
@@ -643,7 +686,9 @@ def _compute_tool_definitions(
     if not quiet_mode:
         if filtered_tools:
             tool_names = [t["function"]["name"] for t in filtered_tools]
-            print(f"🛠️  Final tool selection ({len(filtered_tools)} tools): {', '.join(tool_names)}")
+            print(
+                f"🛠️  Final tool selection ({len(filtered_tools)} tools): {', '.join(tool_names)}"
+            )
         else:
             print("🛠️  No tools selected (all filtered out or unavailable)")
 
@@ -658,6 +703,7 @@ def _compute_tool_definitions(
     # is a no-op for schemas that are already well-formed.
     try:
         from tools.schema_sanitizer import sanitize_tool_schemas
+
         filtered_tools = sanitize_tool_schemas(filtered_tools)
     except Exception as e:  # pragma: no cover — defensive
         logger.warning("Schema sanitization skipped: %s", e)
@@ -674,6 +720,7 @@ def _compute_tool_definitions(
     # case some caller invokes get_tool_definitions twice.
     try:
         from tools.tool_search import assemble_tool_defs, load_config as _load_ts_config
+
         ts_cfg = _load_ts_config()
         if not skip_tool_search_assembly and ts_cfg.enabled != "off":
             context_length = _resolve_active_context_length()
@@ -683,11 +730,13 @@ def _compute_tool_definitions(
                 config=ts_cfg,
             )
             if assembly.activated and not quiet_mode:
-                _forms = {"full": "catalog listing embedded",
-                          "names": "names-only listing embedded",
-                          "mixed": "listing embedded (oversized servers summarized)",
-                          "groups": "server summary embedded (search-only discovery)",
-                          "none": "no listing (search-only)"}
+                _forms = {
+                    "full": "catalog listing embedded",
+                    "names": "names-only listing embedded",
+                    "mixed": "listing embedded (oversized servers summarized)",
+                    "groups": "server summary embedded (search-only discovery)",
+                    "none": "no listing (search-only)",
+                }
                 print(
                     f"🔎 Tool Search (tier {assembly.tier}): {assembly.deferred_count} "
                     f"MCP/plugin tools deferred (~{assembly.deferred_tokens} tokens) behind "
@@ -708,6 +757,7 @@ def _resolve_active_context_length() -> int:
     """
     try:
         from hermes_cli.config import load_config as _load
+
         cfg = _load() or {}
         model_cfg = cfg.get("model") if isinstance(cfg.get("model"), dict) else {}
         if not isinstance(model_cfg, dict):
@@ -715,11 +765,13 @@ def _resolve_active_context_length() -> int:
         _raw_model_id = model_cfg.get("model") or model_cfg.get("default") or ""
         if isinstance(_raw_model_id, dict):
             from hermes_cli.config import split_model_config_default
+
             _raw_model_id, _ = split_model_config_default(_raw_model_id)
         model_id = str(_raw_model_id).strip()
         if not model_id:
             return 0
         from agent.model_metadata import get_model_context_length
+
         # Honor explicit `model.context_length` in config.yaml — short-circuits
         # the OpenRouter /models probe at get_model_context_length step 0, so
         # non-OpenRouter providers don't pay the ~2-3s OpenRouter fetch at every
@@ -739,16 +791,19 @@ def _resolve_active_context_length() -> int:
         if provider:
             try:
                 from hermes_cli.runtime_provider import resolve_runtime_provider
-                rt = resolve_runtime_provider(
-                    requested=provider, target_model=model_id
-                ) or {}
+
+                rt = (
+                    resolve_runtime_provider(requested=provider, target_model=model_id)
+                    or {}
+                )
                 base_url = str(rt.get("base_url") or base_url or "").strip()
                 api_key = str(rt.get("api_key") or "").strip()
             except Exception as rt_exc:
                 logger.debug(
                     "Runtime credential resolution failed for tool-search "
                     "context gate (provider=%s): %s — using config values only",
-                    provider, rt_exc,
+                    provider,
+                    rt_exc,
                 )
         # Fast path: a previously discovered on-disk cache entry is plenty
         # for SIZING the tool-search gate — unlike compression budgeting, a
@@ -763,18 +818,22 @@ def _resolve_active_context_length() -> int:
         if config_ctx is None and base_url:
             try:
                 from agent.model_metadata import get_cached_context_length
+
                 cached_ctx = get_cached_context_length(model_id, base_url)
                 if isinstance(cached_ctx, int) and cached_ctx > 0:
                     return cached_ctx
             except Exception:
                 pass
-        return int(get_model_context_length(
-            model_id,
-            base_url=base_url,
-            api_key=api_key,
-            config_context_length=config_ctx,
-            provider=provider,
-        ) or 0)
+        return int(
+            get_model_context_length(
+                model_id,
+                base_url=base_url,
+                api_key=api_key,
+                config_context_length=config_ctx,
+                provider=provider,
+            )
+            or 0
+        )
     except Exception as e:
         logger.debug("Could not resolve active context length: %s", e)
         return 0
@@ -820,12 +879,14 @@ _READ_SEARCH_TOOLS = {"read_file", "search_files"}
 #
 # Ported from ironclaw#1639.
 _TOOL_ERROR_ROLE_TAG_RE = re.compile(
-    r'</?(?:tool_call|function_call|result|response|output|input|system|assistant|user)>',
+    r"</?(?:tool_call|function_call|result|response|output|input|system|assistant|user)>",
     re.IGNORECASE,
 )
-_TOOL_ERROR_FENCE_OPEN_RE = re.compile(r'^\s*```(?:json|xml|html|markdown)?\s*', re.MULTILINE)
-_TOOL_ERROR_FENCE_CLOSE_RE = re.compile(r'\s*```\s*$', re.MULTILINE)
-_TOOL_ERROR_CDATA_RE = re.compile(r'<!\[CDATA\[.*?\]\]>', re.DOTALL)
+_TOOL_ERROR_FENCE_OPEN_RE = re.compile(
+    r"^\s*```(?:json|xml|html|markdown)?\s*", re.MULTILINE
+)
+_TOOL_ERROR_FENCE_CLOSE_RE = re.compile(r"\s*```\s*$", re.MULTILINE)
+_TOOL_ERROR_CDATA_RE = re.compile(r"<!\[CDATA\[.*?\]\]>", re.DOTALL)
 # Single home for the tool-error context cap: tools/registry.py. Both this
 # sanitizer (exception paths) and the dispatch-boundary bounding
 # (tool_error / _bound_json_error_result) trim to the same budget so text
@@ -845,13 +906,14 @@ def _sanitize_tool_error(error_msg: str) -> str:
     sanitized = _TOOL_ERROR_FENCE_CLOSE_RE.sub("", sanitized)
     sanitized = _TOOL_ERROR_CDATA_RE.sub("", sanitized)
     if len(sanitized) > _TOOL_ERROR_MAX_LEN:
-        sanitized = sanitized[:_TOOL_ERROR_MAX_LEN - 3] + "..."
+        sanitized = sanitized[: _TOOL_ERROR_MAX_LEN - 3] + "..."
     return f"[TOOL_ERROR] {sanitized}"
 
 
 # =========================================================================
 # Tool argument type coercion
 # =========================================================================
+
 
 def coerce_tool_args(tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
     """Coerce tool call arguments to match their JSON Schema types.
@@ -888,6 +950,7 @@ def coerce_tool_args(tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
     # wire names before schema lookup / dispatch.
     try:
         from tools.schema_sanitizer import unrename_tool_args
+
         args = unrename_tool_args(schema.get("parameters"), args)
     except Exception:  # pragma: no cover — never break dispatch
         pass
@@ -905,7 +968,11 @@ def coerce_tool_args(tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
         # ``None`` itself is preserved — we don't know whether the model
         # meant "omit" or "empty list", and tools with sensible defaults
         # (e.g. read_file's normalize_read_pagination) already handle it.
-        if expected == "array" and value is not None and not isinstance(value, (list, tuple)):
+        if (
+            expected == "array"
+            and value is not None
+            and not isinstance(value, (list, tuple))
+        ):
             if isinstance(value, str):
                 coerced = _coerce_value(value, expected, schema=prop_schema)
                 if coerced is not value:
@@ -921,18 +988,22 @@ def coerce_tool_args(tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
                         "but could not be parsed — model may have emitted a "
                         "JSON-encoded string instead of a native array. "
                         "Falling back to single-element list.",
-                        tool_name, key,
+                        tool_name,
+                        key,
                     )
                 args[key] = [value]
                 logger.info(
                     "coerce_tool_args: wrapped bare string in list for %s.%s",
-                    tool_name, key,
+                    tool_name,
+                    key,
                 )
                 continue
             args[key] = [value]
             logger.info(
                 "coerce_tool_args: wrapped bare %s in list for %s.%s",
-                type(value).__name__, tool_name, key,
+                type(value).__name__,
+                tool_name,
+                key,
             )
             continue
 
@@ -1221,6 +1292,7 @@ def _emit_post_tool_call_hook(
         return
     try:
         from hermes_cli.lifecycle import has_hook, invoke_hook
+
         if not has_hook("post_tool_call"):
             return
         if status is None:
@@ -1345,11 +1417,15 @@ def handle_function_call(
             # the deferred catalog identical to the deferrable subset of the
             # session's own tool list, and avoids polluting the process-global
             # _last_resolved_tool_names with out-of-scope tools.
-            current_defs = get_tool_definitions(
-                enabled_toolsets=enabled_toolsets,
-                disabled_toolsets=disabled_toolsets,
-                quiet_mode=True, skip_tool_search_assembly=True,
-            ) or []
+            current_defs = (
+                get_tool_definitions(
+                    enabled_toolsets=enabled_toolsets,
+                    disabled_toolsets=disabled_toolsets,
+                    quiet_mode=True,
+                    skip_tool_search_assembly=True,
+                )
+                or []
+            )
         except Exception:
             current_defs = []
         if function_name == _ts_mod.TOOL_SEARCH_NAME:
@@ -1367,7 +1443,9 @@ def handle_function_call(
                 )
             )
         if function_name == _ts_mod.TOOL_CALL_NAME:
-            underlying_name, underlying_args, err = _ts_mod.resolve_underlying_call(function_args or {})
+            underlying_name, underlying_args, err = _ts_mod.resolve_underlying_call(
+                function_args or {}
+            )
             if err or not underlying_name:
                 return _return_bridge_result(
                     tool_error(err or "tool_call could not be resolved")
@@ -1389,7 +1467,9 @@ def handle_function_call(
             # Validate against the deferred tool's concrete schema before
             # dispatch. This covers constraints the provider cannot enforce
             # through the generic tool_call ``arguments: object`` bridge.
-            _probe_err = _ts_mod.validate_deferred_call_args(underlying_name, underlying_args)
+            _probe_err = _ts_mod.validate_deferred_call_args(
+                underlying_name, underlying_args
+            )
             if _probe_err is not None:
                 return _return_bridge_result(_probe_err)
             # Recurse with the underlying tool. All hooks fire against the
@@ -1451,6 +1531,7 @@ def handle_function_call(
             block_message: Optional[str] = None
             try:
                 from hermes_cli.plugins import _dispatch_pre_tool_call_hooks
+
                 block_message, modified_args = _dispatch_pre_tool_call_hooks(
                     function_name,
                     function_args,
@@ -1490,7 +1571,9 @@ def handle_function_call(
         try:
             from acp_adapter.edit_approval import maybe_require_edit_approval
 
-            edit_block_message = maybe_require_edit_approval(function_name, function_args)
+            edit_block_message = maybe_require_edit_approval(
+                function_name, function_args
+            )
             if edit_block_message is not None:
                 _emit_post_tool_call_hook(
                     function_name=function_name,
@@ -1530,6 +1613,7 @@ def handle_function_call(
         if function_name not in _READ_SEARCH_TOOLS:
             try:
                 from tools.file_tools import notify_other_tool_call
+
                 notify_other_tool_call(task_id or "default")
             except Exception:
                 pass  # file_tools may not be loaded yet
@@ -1548,6 +1632,7 @@ def handle_function_call(
                 reset_current_observability_context,
                 set_current_observability_context,
             )
+
             _approval_tokens = set_current_observability_context(
                 turn_id=turn_id or "",
                 tool_call_id=tool_call_id or "",
@@ -1559,22 +1644,32 @@ def handle_function_call(
             if function_name == "execute_code":
                 # Prefer the caller-provided list so subagents can't overwrite
                 # the parent's tool set via the process-global.
-                sandbox_enabled = enabled_tools if enabled_tools is not None else _last_resolved_tool_names
+                sandbox_enabled = (
+                    enabled_tools
+                    if enabled_tools is not None
+                    else _last_resolved_tool_names
+                )
+
                 def _dispatch(next_args: Dict[str, Any]) -> Any:
                     return registry.dispatch(
-                        function_name, next_args,
+                        function_name,
+                        next_args,
                         task_id=task_id,
                         session_id=session_id,
                         enabled_tools=sandbox_enabled,
                     )
+
             else:
+
                 def _dispatch(next_args: Dict[str, Any]) -> Any:
                     return registry.dispatch(
-                        function_name, next_args,
+                        function_name,
+                        next_args,
                         task_id=task_id,
                         session_id=session_id,
                         user_task=user_task,
                     )
+
             if skip_tool_execution_middleware:
                 result = _dispatch(function_args)
             else:
@@ -1592,7 +1687,10 @@ def handle_function_call(
                     api_request_id=api_request_id or "",
                 )
         finally:
-            if _approval_tokens is not None and reset_current_observability_context is not None:
+            if (
+                _approval_tokens is not None
+                and reset_current_observability_context is not None
+            ):
                 try:
                     reset_current_observability_context(_approval_tokens)
                 except Exception:
@@ -1622,6 +1720,7 @@ def handle_function_call(
         # field derivation and the payload dispatch.
         try:
             from hermes_cli.lifecycle import has_hook, invoke_hook
+
             if has_hook("transform_tool_result"):
                 status, error_type, error_message = _tool_result_observer_fields(
                     function_name,
@@ -1681,6 +1780,7 @@ def handle_function_call(
 # =============================================================================
 # Backward-compat wrapper functions
 # =============================================================================
+
 
 def get_all_tool_names() -> List[str]:
     """Return all registered tool names."""

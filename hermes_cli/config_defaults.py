@@ -1467,6 +1467,7 @@ DEFAULT_CONFIG = {
         "extra": {
             # Bot API 10.1 native rich messages (tables/task lists/math). Off = legacy MarkdownV2,
             # since rich messages are hard to copy as plain text.
+            "allow_update_command": True,  # Telegram /update, including administrators
             "rich_messages": False,
             # Experimental rich draft previews while streaming DMs; off because Telegram
             # Desktop/macOS can overlay draft frames until the chat redraws.
@@ -2065,6 +2066,8 @@ DEFAULT_CONFIG = {
     },
 
     "updates": {
+        # Leave running gateways/services on their current code until manually restarted.
+        "restart_gateways": True,
         # Pre-update backup. quick = snapshot small critical state (pairing JSONs, cron jobs,
         # config.yaml, .env, auth.json, profile DBs) into <HERMES_HOME>/state-snapshots/, skipping
         # files >1 GiB; restore via ``/snapshot``. full = quick PLUS a ``hermes backup`` zip in

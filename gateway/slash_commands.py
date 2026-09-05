@@ -1205,6 +1205,9 @@ class GatewaySlashCommandsMixin(
         # Block non-messaging platforms (API server, webhooks, ACP); plugin platforms with
         # allow_update_command=True are also allowed.
         src = event.source
+        if (src.platform == Platform.TELEGRAM
+                and self._adapter_extra_for_source(src).get("allow_update_command", True) is False):
+            return "Update via Telegram is disabled for this profile. Update Hermes on the server."
         if src.platform not in self._UPDATE_ALLOWED_PLATFORMS:
             try:
                 from gateway.platform_registry import platform_registry

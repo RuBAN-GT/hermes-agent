@@ -211,6 +211,9 @@ def _run_pending_fleet_restart() -> bool:
     See #95294.
     """
     from hermes_cli.update_cmd import _m
+    from hermes_cli.update_policy import restart_gateways_enabled
+    if not restart_gateways_enabled():
+        return False
     print("→ Restarting gateways left on pre-update code...")
     with suppress(Exception):
         _m()._purge_stale_hermes_modules()
@@ -288,6 +291,10 @@ def _apply_pending_fleet_restart_catchup() -> None:
     No-op when nothing is pending; exits 1 on incomplete catch-up so automation
     does not treat the fleet as healthy.
     """
+    from hermes_cli.update_policy import restart_gateways_enabled, report_deferred_gateway_restart
+    if not restart_gateways_enabled():
+        report_deferred_gateway_restart()
+        return
     from hermes_cli.update_cmd import _run_pending_fleet_restart
     if not _pending_fleet_restart_needed():
         return
@@ -850,6 +857,7 @@ class _GatewayRestartOutcome:
     relaunched_profiles: list
     externally_supervised_profiles: list
     killed_pids: set
+    deferred: bool = False
 
     def record_receipt(self, **extra) -> None:
         """Best-effort ``record_gateway_restart`` from the current bookkeeping."""
@@ -1052,6 +1060,11 @@ def _restart_gateway_fleet_after_update(_pre_update_plan, gateway_mode: bool):
         incomplete=False, phase_errors=[], pre_restart_gateway_pids=[], restarted_services=[], failed_or_stale_units=[],
         relaunched_profiles=[], externally_supervised_profiles=[], killed_pids=set(),
     )
+    from hermes_cli.update_policy import restart_gateways_enabled, report_deferred_gateway_restart
+    if not restart_gateways_enabled():
+        out.deferred = True
+        report_deferred_gateway_restart()
+        return out
     # Scope-qualified twin (``user/hermes-serve`` vs ``system/hermes-serve`` are different
     # processes; abort recovery needs WHICH settled). Bare names stay in
     # ``restarted_services`` for the fleet probe, receipt and summary.
@@ -1175,6 +1188,15 @@ def _verify_fleet_after_update(restart, *, _pre_update_plan, _windows_gateway_re
     from hermes_cli.update_cmd import (
         _finish_dashboard_update_cleanup, _m, _surviving_pre_update_serve_runtimes, _warn_stale_serve_runtimes,
     )
+    if getattr(restart, "deferred", False) is True:
+        from hermes_cli.update_receipt import finalize_update_receipt
+        finalize_update_receipt(
+            "success" if update_complete else "partial",
+            stop_reason="Automatic restarts disabled; runtime verification deferred until manual restart",
+        )
+        if not update_complete:
+            sys.exit(1)
+        return
     with _best_effort('Legacy unit check during update failed: %s'):
         _print_legacy_units_warning()
 

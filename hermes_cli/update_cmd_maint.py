@@ -319,6 +319,9 @@ def _finish_dashboard_update_cleanup(
 
     See #83595.
     """
+    from hermes_cli.update_policy import restart_gateways_enabled
+    if not restart_gateways_enabled():
+        return
     from hermes_cli.update_cmd import _m, _reload_process_scan_modules
     if node_failures:
         print()

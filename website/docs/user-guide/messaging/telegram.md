@@ -1093,6 +1093,23 @@ With `guest_mode: true`, a message from a non-allowlisted group is processed **o
 
 DMs and allowlisted groups behave exactly as before.
 
+## Disable updates from Telegram
+
+To block `/update` for everyone, including administrators, add this to the receiving
+profile's `config.yaml` and restart its gateway:
+
+```yaml
+gateway:
+  platforms:
+    telegram:
+      extra:
+        allow_update_command: false
+```
+
+The default is `true`. Each bot uses its own profile's adapter settings, including
+multiplexed gateways. This blocks the slash command before the updater is launched;
+CLI updates and other slash commands are unaffected. It does not restrict shell tools.
+
 ## Slash Command Access Control
 
 By default, every allowed user can run every slash command. To split your allowlist into **admins** (full slash command access) and **regular users** (only commands you explicitly enable), add `allow_admin_from` and `user_allowed_commands` to the platform's `extra` block:

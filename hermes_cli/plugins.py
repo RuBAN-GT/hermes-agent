@@ -289,6 +289,17 @@ class PluginContext:
         from hermes_cli.platform_actions import PlatformActions
         return PlatformActions(self.plugin_id)
 
+    @cached_property
+    def human_decisions(self):
+        """Capability-gated decisions in an existing Telegram session."""
+        from hermes_cli.plugin_human_decisions import PluginHumanDecisions
+        facade = PluginHumanDecisions(
+            self.plugin_id, self._manager,
+            lambda: self.has_capability("gateway.human_decisions"),
+        )
+        self._track("human_decisions", self.plugin_id, facade.cancel_all)
+        return facade
+
     def _wrong_type(self, obj: Any, base_class: type, label: str, article: str = "a") -> bool:
         """Warn-and-ignore gate shared by every registrar that requires a base class."""
         if isinstance(obj, base_class):
@@ -497,7 +508,12 @@ class PluginContext:
         ``allow_*`` key decides. Unknown ids / unreadable consent -> False (fail closed)."""
         if self.manifest.source == "bundled" and capability == "tools.override":
             return True
-        return plugin_capability_granted(self.plugin_id, capability)
+        try:
+            with _plugin_home_scope(self._manager.home_path):
+                config = load_config_readonly() or {}
+        except Exception:
+            return False
+        return plugin_capability_granted(self.plugin_id, capability, config=config)
 
     def call_mcp(
         self, server: str, tool: str, arguments: Optional[Dict[str, Any]] = None,
@@ -1120,6 +1136,7 @@ class PluginManager(PluginLoaderMixin, PluginDispatchMixin, PluginLedgerMixin):
         self._discovered: bool = False
         self._cli_ref = None  # Set by CLI after plugin discovery
         self._gateway_message_injector: tuple[object, Callable] | None = None
+        self._gateway_human_decisions: tuple[object, Callable] | None = None
         self._context_engine = None  # Set by a plugin via register_context_engine()
         # Manager-local registries keyed by name (see the matching ``PluginContext.register_*``):
         # plugins, hooks, middleware, CLI + slash commands, prompt sections, skills (qualified name ->
@@ -1196,6 +1213,31 @@ class PluginManager(PluginLoaderMixin, PluginDispatchMixin, PluginLedgerMixin):
         """Submit a plugin-triggered turn to the live gateway."""
         registered = self._gateway_message_injector
         return registered is not None and bool(registered[1](**kwargs))
+
+    @property
+    def has_gateway_human_decisions(self) -> bool:
+        """Return whether a live gateway can render plugin decisions."""
+        return self._gateway_human_decisions is not None
+
+    def set_gateway_human_decisions(
+        self, owner: object, requester: Callable[..., Any]
+    ) -> None:
+        """Publish the live gateway's session-bound decision scheduler."""
+        self._gateway_human_decisions = (owner, requester)
+
+    def clear_gateway_human_decisions(self, owner: object) -> None:
+        """Clear the scheduler only when it still belongs to ``owner``."""
+        registered = self._gateway_human_decisions
+        if registered is not None and registered[0] is owner:
+            self._gateway_human_decisions = None
+
+    def request_gateway_human_decision(self, **kwargs: Any) -> Any:
+        """Submit a plugin decision request to the live gateway."""
+        registered = self._gateway_human_decisions
+        if registered is None:
+            return None
+        return registered[1](**kwargs)
+
 
     def discover_and_load(self, force: bool = False) -> None:
         """Scan all plugin sources and load each plugin found; ``force`` unloads first so config
@@ -1976,6 +2018,34 @@ def get_plugin_command_handler(name: str) -> Optional[Callable]:
 
 
 _PLUGIN_COMMAND_AWAIT_TIMEOUT_SECS = 30.0
+
+
+def invoke_plugin_command_handler(
+    handler: Callable,
+    raw_args: str,
+    *,
+    session_key: str = "",
+) -> Any:
+    """Invoke a command handler with optional gateway session metadata.
+
+    Existing one-argument handlers retain their original contract. Plugins can
+    explicitly opt in by naming ``session_key`` or accepting arbitrary keyword
+    arguments.
+    """
+    try:
+        parameters = inspect.signature(handler).parameters.values()
+    except (TypeError, ValueError):
+        return handler(raw_args)
+    accepts_session_key = any(
+        (parameter.name == "session_key" and parameter.kind in (
+            inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY
+        ))
+        or parameter.kind is inspect.Parameter.VAR_KEYWORD
+        for parameter in parameters
+    )
+    if accepts_session_key:
+        return handler(raw_args, session_key=session_key)
+    return handler(raw_args)
 
 
 def resolve_plugin_command_result(result: Any) -> Any:

@@ -978,10 +978,13 @@ class GatewayInboundMixin:
         # underscored autocomplete form matches plugin commands registered with hyphens.
         if command:
             try:
-                from hermes_cli.plugins import get_plugin_command_handler
+                from hermes_cli.plugins import get_plugin_command_handler, invoke_plugin_command_handler
                 plugin_handler = get_plugin_command_handler(command.replace("_", "-"))
                 if plugin_handler:
-                    result = plugin_handler(event.get_command_args().strip())
+                    result = invoke_plugin_command_handler(
+                        plugin_handler, event.get_command_args().strip(),
+                        session_key=self._session_key_for_source(source),
+                    )
                     if asyncio.iscoroutine(result):
                         result = await result
                     return True, str(result) if result else None, command
@@ -1694,15 +1697,19 @@ class GatewayInboundMixin:
         """Publish this live gateway's plugin message scheduler."""
         from hermes_cli.plugins import get_plugin_manager
 
-        get_plugin_manager().set_gateway_message_injector(
-            self, self._schedule_plugin_message_injection
-        )
+        manager = get_plugin_manager()
+        manager.set_gateway_message_injector(self, self._schedule_plugin_message_injection)
+        manager.set_gateway_human_decisions(self, self._schedule_plugin_human_decision)
 
     def _clear_plugin_message_injector(self) -> None:
         """Remove this runner's scheduler without clobbering a newer owner."""
         from hermes_cli.plugins import get_plugin_manager
 
-        get_plugin_manager().clear_gateway_message_injector(self)
+        from hermes_cli.human_decisions import human_decisions
+        manager = get_plugin_manager()
+        manager.clear_gateway_message_injector(self)
+        manager.clear_gateway_human_decisions(self)
+        human_decisions.cancel_gateway(str(id(self)))
 
     def _schedule_plugin_message_injection(
         self, *, session_key: str, content: str, plugin_id: str

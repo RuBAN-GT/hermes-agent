@@ -365,7 +365,10 @@ class _PollingLifecycleAbort(RuntimeError):
     """Internal control flow for polling startup fenced by teardown."""
 
 
-class TelegramAdapter(BasePlatformAdapter):
+from plugins.platforms.telegram.human_decisions import TelegramHumanDecisionsMixin
+
+
+class TelegramAdapter(TelegramHumanDecisionsMixin, BasePlatformAdapter):
     """Telegram bot adapter: users/groups, MarkdownV2 replies, forum topics, media."""
 
     MAX_MESSAGE_LENGTH = 4096
@@ -4225,6 +4228,9 @@ class TelegramAdapter(BasePlatformAdapter):
             return
         data = query.data
         cb = self._callback_ctx(query)
+        if data.startswith("hd:"):
+            await self._handle_human_decision_callback(query, data, cb)
+            return
         # Model picker / generic choice picker (/reasoning, /fast) need a chat id.
         for prefixes, handler in (
             (("mp:", "mpg:", "mpv:", "mm:", "mc:", "mb", "mx", "mg:"), self._handle_model_picker_callback),

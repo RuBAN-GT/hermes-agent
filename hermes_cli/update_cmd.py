@@ -1225,6 +1225,8 @@ def _cmd_update_impl(args, gateway_mode: bool):
     """Body of ``cmd_update`` — kept separate so the wrapper can always restore stdio even on
     ``sys.exit``. Self-lock deferral deliberately does NOT run here (pre-fetch it stranded users
     on the OLD checkout in an exit-2 loop); it runs right before the dependency sync."""
+    from hermes_cli.update_policy import restart_gateways_enabled
+    restart_gateways_enabled()  # Validate operator policy before changing the installation.
     opts = _resolve_update_options(args, gateway_mode)
     gw_input_fn, assume_yes = opts.gw_input_fn, opts.assume_yes
 

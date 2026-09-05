@@ -152,6 +152,19 @@ Leaving these unset keeps the legacy defaults (`HERMES_API_TIMEOUT=1800`s, `HERM
 
 ## Update Behavior
 
+In this fork, running `hermes update` on a custom Git branch (such as `custom`)
+fetches `origin/<current-branch>` and the official NousResearch `main`, then merges
+both into the current branch. Local commits survive subsequent updates; no automatic
+push occurs. Explicitly selecting a different `--branch`, or using `--switch-branch`,
+retains the normal branch-switch behavior. `main`, `master`, and detached checkouts
+also retain the normal updater behavior.
+
+If either merge fails, the updater aborts its merge and restores the pre-update commit.
+It reports conflicting files and exits with an error before dependency installation or
+service restarts. Uncommitted edits remain in the reported autostash for manual recovery.
+A fetch failure also stops the update instead of reporting success. Git needs a configured
+`user.name` and `user.email` when a merge commit is necessary.
+
 `hermes update` settings live under `updates` in `config.yaml`:
 
 ```yaml

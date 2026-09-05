@@ -737,10 +737,10 @@ def _rollback_if_pulled_syntax_error(git_cmd, pre_pull_sha) -> None:
 
 def _pull_updates(
     git_cmd, branch, auto_stash_ref, *, prompt_for_restore, gw_input_fn, discard_local_changes,
-    keep_stash):
-    """Fast-forward onto ``origin/<branch>`` and settle the autostash. Divergence by shape:
-    custom branch -> merge, same branch -> reset, orphan history -> rescue ref first; a
-    post-pull syntax error in a critical file rolls back. Exits on failure; returns pre-pull SHA."""
+    keep_stash, upstream_ref=None):
+    """Update origin and settle the autostash; custom forks also merge pinned official main.
+    The legacy path reconciles divergence by branch shape. A post-pull syntax error in a
+    critical file rolls back. Exits on failure; returns pre-pull SHA."""
     update_succeeded = False
     # Pre-pull SHA for auto-rollback (stray conflict markers once bricked every updater).
     # Capture the pre-pull SHA so we can auto-roll-back if the new code has a syntax error in a
@@ -750,7 +750,10 @@ def _pull_updates(
     try:
         # merge --ff-only the already-fetched ref instead of `git pull`, which would do a
         # SECOND network fetch; identical in effect given the fresh tracking ref.
-        if _git_run(git_cmd, ["merge", "--ff-only", f"origin/{branch}"]).returncode != 0:
+        if upstream_ref is not None:
+            from hermes_cli.update_cmd_custom import merge_fork_updates
+            merge_fork_updates(git_cmd, branch, upstream_ref)
+        elif _git_run(git_cmd, ["merge", "--ff-only", f"origin/{branch}"]).returncode != 0:
             _reconcile_diverged_checkout(git_cmd, branch, pre_pull_sha)
         _rollback_if_pulled_syntax_error(git_cmd, pre_pull_sha)
         update_succeeded = True
@@ -784,6 +787,7 @@ class _CheckoutPlan:
     prompt_for_restore: bool
     switch_block_reason: "str | None"
     upstream_checked: bool
+    upstream_ref: str | None = None
 
 
 def _apply_parked_branch_guard(
@@ -832,7 +836,7 @@ def _apply_parked_branch_guard(
 
 def _prepare_checkout_for_update(
     git_cmd, branch, current_branch, *, is_fork, assume_yes, gateway_mode, gw_input_fn,
-    switch_branch, _windows_gateway_resume):
+    switch_branch, _windows_gateway_resume, merge_upstream=False):
     """Parked-branch guard, land on the target, stash, count new commits. Exits when the
     checkout is unsafe to move or the target is missing. ``commit_count`` is 0 when up to
     date, -1 when tips differ but the shallow count is unrecoverable."""
@@ -885,7 +889,20 @@ def _prepare_checkout_for_update(
     # "Already up to date!" and verified nothing). Non-fork checkouts have no upstream question: origin IS
     # the official repo, so "Already up to date!" is fully verified there.
     upstream_checked = True
-    if commit_count == 0 and is_fork and branch == "main":
+    upstream_ref = None
+    if merge_upstream:
+        from hermes_cli.update_cmd_custom import fetch_official_main
+        try:
+            upstream_ref = fetch_official_main(git_cmd)
+            result = _git_run(
+                git_cmd, ["rev-list", "--count", f"origin/{branch}", upstream_ref, "--not", "HEAD"],
+                check=True)
+            commit_count = int(result.stdout.strip())
+        except (SystemExit, subprocess.CalledProcessError):
+            if auto_stash_ref is not None:
+                print(f"  Local changes preserved in stash: {auto_stash_ref}")
+            raise
+    elif commit_count == 0 and is_fork and branch == "main":
         pre_sync_sha = _capture_head_sha(git_cmd, _m().PROJECT_ROOT)
         upstream_checked = _m()._sync_with_upstream_if_needed(
             git_cmd, _m().PROJECT_ROOT, assume_yes=assume_yes, input_fn=gw_input_fn)
@@ -899,7 +916,8 @@ def _prepare_checkout_for_update(
     return _CheckoutPlan(
         auto_stash_ref=auto_stash_ref, commit_count=commit_count, in_place_update=in_place_update,
         parked_branch_switched=parked_branch_switched, prompt_for_restore=prompt_for_restore,
-        switch_block_reason=switch_block_reason, upstream_checked=upstream_checked)
+        switch_block_reason=switch_block_reason, upstream_checked=upstream_checked,
+        upstream_ref=upstream_ref)
 
 
 @dataclass
@@ -1280,6 +1298,11 @@ def _cmd_update_impl(args, gateway_mode: bool):
     try:
         # Scoped fetch: a bare `git fetch origin` pulls thousands of branches and can stall.
         branch = _m()._resolve_update_branch(args)
+        from hermes_cli.update_cmd_custom import select_fork_branch
+        branch, merge_upstream = select_fork_branch(
+            git_cmd, branch, is_fork=is_fork,
+            explicit_branch=bool((getattr(args, "branch", None) or "").strip()),
+            switch_branch=opts.switch_branch)
 
         # Self-heal abandoned .git/*.lock files (crashed fetch) or the fetch fails "File exists".
         from hermes_cli.gitlock import clear_stale_git_locks, clear_stale_tmp_packs
@@ -1305,7 +1328,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
         _plan = _prepare_checkout_for_update(
             git_cmd, branch, current_branch, is_fork=is_fork, assume_yes=assume_yes,
             gateway_mode=gateway_mode, gw_input_fn=gw_input_fn, switch_branch=opts.switch_branch,
-            _windows_gateway_resume=_windows_gateway_resume)
+            _windows_gateway_resume=_windows_gateway_resume, merge_upstream=merge_upstream)
         commit_count = _plan.commit_count
 
         if commit_count == 0:
@@ -1329,7 +1352,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
         pre_pull_sha = _pull_updates(
             git_cmd, branch, _plan.auto_stash_ref, prompt_for_restore=_plan.prompt_for_restore,
             gw_input_fn=gw_input_fn, discard_local_changes=opts.discard_local_changes,
-            keep_stash=opts.keep_stash)
+            keep_stash=opts.keep_stash, upstream_ref=_plan.upstream_ref)
         _apply_pulled_update(
             git_cmd, branch, pre_pull_sha, _plan, opts, gateway_mode=gateway_mode,
             is_fork=is_fork, desktop_dir=desktop_dir,

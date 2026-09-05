@@ -112,6 +112,7 @@ async def test_waiter_cancellation_and_gateway_shutdown_remove_ticket():
     with pytest.raises(asyncio.CancelledError):
         await waiting
     assert request.request_id not in store._by_id
+    assert not store._completed
 
     request = _create(store)
     waiting = asyncio.create_task(store.wait(request.request_id))
@@ -157,6 +158,7 @@ async def test_wait_times_out_and_invalid_requests_fail_closed():
     with patch("hermes_cli.human_decisions.time.monotonic", side_effect=[0, 2]):
         request = _create(store, timeout_s=1)
         assert (await store.wait(request.request_id))["error"] == "timeout"
+    assert not store._completed
 
     invalid = store.create(
         plugin_id="plugin",

@@ -160,6 +160,7 @@ async def test_gateway_resolver_rejects_rotated_session():
     assert not isinstance(request, dict)
 
     result = await runner._resolve_plugin_human_decision(
+        adapter=_adapter(),
         token=request.token,
         choice_index=0,
         actor_id="42",

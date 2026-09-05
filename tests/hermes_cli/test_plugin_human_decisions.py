@@ -77,3 +77,36 @@ async def test_plugin_unload_cancels_its_pending_decisions():
 
     assert manager.unload("plugin") is True
     assert (await waiting)["error"] == "plugin_unloaded"
+
+
+def test_capability_checks_stay_bound_to_plugin_owner_profile(tmp_path, monkeypatch):
+    contexts = []
+    for name, granted in (("allowed", True), ("denied", False)):
+        home = tmp_path / name
+        home.mkdir()
+        (home / "config.yaml").write_text(yaml.safe_dump({
+            "plugins": {"entries": {"plugin": {"allow_human_decisions": granted}}}
+        }))
+        manager = PluginManager(scope_key=str(home))
+        contexts.append(PluginContext(PluginManifest(name="plugin", key="plugin"), manager))
+    for context in contexts:
+        monkeypatch.setenv("HERMES_HOME", str(context._manager.home_path))
+        assert contexts[0].has_capability("gateway.human_decisions")
+        assert not contexts[1].has_capability("gateway.human_decisions")
+
+
+def test_plugin_commands_preserve_legacy_and_session_aware_signatures():
+    from hermes_cli.plugins import invoke_plugin_command_handler
+
+    def legacy(raw_args):
+        return raw_args
+
+    def session_aware(raw_args, *, session_key):
+        return raw_args, session_key
+
+    def positional_only(raw_args, session_key="default", /):
+        return raw_args, session_key
+
+    assert invoke_plugin_command_handler(legacy, "go", session_key="s") == "go"
+    assert invoke_plugin_command_handler(session_aware, "go", session_key="s") == ("go", "s")
+    assert invoke_plugin_command_handler(positional_only, "go", session_key="s") == ("go", "default")

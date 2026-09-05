@@ -519,7 +519,8 @@ if result["ok"]:
 ```
 
 The decision is single-use, expires after `timeout_s`, and only the original
-session actor can resolve it. v1 supports Telegram only; unavailable gateways,
+session actor on the same bot can resolve it. The timeout includes prompt
+delivery; cancellation and plugin unload release pending requests. v1 supports Telegram only; unavailable gateways,
 other platforms, rotated sessions, and expired prompts return structured errors.
 This is a plugin interaction primitive, **not** a tool approval, security
 policy, auto-approve mechanism, or substitute for `ApprovalPolicy`.

@@ -116,6 +116,7 @@ class HumanDecisions:
             remaining = entry.request.expires_at - time.monotonic()
             if remaining <= 0:
                 self._finish_locked(entry, error("timeout"))
+                self._completed.pop(request_id, None)
                 return error("timeout")
             future = entry.future
         try:
@@ -134,6 +135,8 @@ class HumanDecisions:
         except asyncio.CancelledError:
             self.cancel(request_id, "cancelled")
             raise
+        finally:
+            self.discard(request_id)
 
     def get_by_token(self, token: str) -> Optional[HumanDecisionRequest]:
         """Return immutable request metadata for gateway-owned validation."""

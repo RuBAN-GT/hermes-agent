@@ -867,6 +867,14 @@ def _pause_windows_gateways_for_update() -> dict | None:
         from gateway.status import get_process_start_time, terminate_pid
         from hermes_cli.gateway import _capture_gateway_argv
     profile_processes, service_gateways, service_gateway_pids, running_pids = _discover_windows_gateways()
+    from hermes_cli.update_policy import restart_gateways_enabled
+    if not restart_gateways_enabled():
+        if running_pids:
+            raise RuntimeError(
+                "updates.restart_gateways is false; stop Windows gateways manually before updating "
+                "because running processes lock installation files."
+            )
+        return None
     if not running_pids:
         return _windows_cold_start_plan()
     profiles, mapped_pids, socket_acks = _request_socket_pauses(running_pids, profile_processes, service_gateway_pids)

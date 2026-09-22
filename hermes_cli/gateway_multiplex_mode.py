@@ -78,7 +78,7 @@ def default_gateway_multiplexes(default_home: Optional[Path] = None) -> bool:
     if recorded is not None:
         return bool(recorded)
     flag = explicit_multiplex_flag(root)
-    return False if flag is None else True
+    return False if flag is None else bool(flag)
 
 
 @dataclass(frozen=True)
@@ -141,9 +141,10 @@ def resolve_multiplex_mode(config) -> MultiplexDecision:
     says why, and it converges by itself once ``hermes gateway migrate --multiplex`` has run.
     """
     current = getattr(config, "multiplex_profiles", None)
-    if current:
+    if current is True:
         return MultiplexDecision(True, "config")
-    retired_opt_out = current is False
+    if current is False:
+        return MultiplexDecision(False, "config")
     try:
         blocker = implicit_multiplex_blocker()
     except Exception as exc:  # a broken preflight must not take the gateway down with it
@@ -151,8 +152,6 @@ def resolve_multiplex_mode(config) -> MultiplexDecision:
         blocker = f"preflight failed ({exc})"
     if blocker:
         decision = MultiplexDecision(False, "guard", blocker)
-    elif retired_opt_out:
-        decision = MultiplexDecision(True, "retired-opt-out", RETIRED_OPT_OUT_REASON)
     else:
         decision = MultiplexDecision(True, "default", "gateway.multiplex_profiles unset; default applies")
     config.multiplex_profiles = decision.enabled

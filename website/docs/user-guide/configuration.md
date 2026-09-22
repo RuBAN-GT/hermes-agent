@@ -198,7 +198,6 @@ an override that permits prompting can still interrupt a background check.
 
 ```yaml
 updates:
-  restart_gateways: true         # false: leave running services untouched; restart manually
   pre_update_backup: quick       # quick (state snapshot, default) | full (snapshot + HERMES_HOME zip) | off
   backup_keep: 5                 # Keep this many full pre-update backup zips
   non_interactive_local_changes: stash  # stash | discard
@@ -206,17 +205,6 @@ updates:
 ```
 
 `pre_update_backup` is the single pre-update safety knob: `quick` (default) snapshots critical state files (pairing data, cron jobs, config, auth; files over 1 GiB are skipped) into `state-snapshots/`; `full` additionally zips all of `HERMES_HOME` into `backups/` and can add minutes on large homes; `off` disables both. Legacy booleans are honored (`true` → `full`, `false` → `off`).
-
-`restart_gateways: false` disables update-driven gateway/service restarts, including
-pending-restart catch-up on an already-current checkout and dashboard cleanup. Code and
-dependencies still update; running processes keep their loaded old code until you restart
-each profile manually. The update receipt records the skipped restart and runtime
-verification is deferred, rather than reported as verified. The pending-restart marker
-is retained. Set the flag in the profile whose CLI runs `hermes update`; it controls the
-whole installation's restart phase, including gateway-triggered updates.
-On Windows, stop running gateways manually before updating with this flag disabled,
-because their processes lock installation files. Hermes will not stop or cold-start them.
-This option does not affect an explicit `hermes gateway restart`.
 
 Point-in-time copies of `config.yaml` itself (taken before `hermes setup` rewrites it, before `hermes migrate` edits it, every time the file parses successfully, and when it fails to parse) go to `backups/config/config.yaml.<reason>.<timestamp>`. Identical repeats are skipped and only the newest five per reason are kept, so they never pile up beside `config.yaml`. If `config.yaml` is broken, Hermes serves the newest `good` copy instead of built-in defaults and warns on every start until the YAML is fixed; the broken file is never modified.
 
